@@ -6,6 +6,7 @@ import {
   FileText,
   PenLine,
   Folder,
+  FolderOpen,
   CheckCircle2,
   LayoutGrid,
   List,
@@ -19,10 +20,19 @@ import {
   RotateCcw,
   UploadCloud,
   AlertCircle,
+  X,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 
 type FilterCategory = 'all' | 'writing' | 'projects' | 'completed';
+
+interface FolderFileInfo {
+  id: string;
+  originalName: string;
+  fileSize: number;
+  mimeType: string;
+}
 
 interface ArchiveCardItem {
   id: string;
@@ -33,6 +43,8 @@ interface ArchiveCardItem {
   originalId?: string;
   attachmentId?: string | null;
   fileSize?: number;
+  fileCount?: number;
+  files?: FolderFileInfo[];
 }
 
 function FileThumbnail({ type }: { type: 'PDF' | 'DOCX' | 'FOLDER' }) {
@@ -93,7 +105,9 @@ export default function ArchivePage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [selectedFolderModal, setSelectedFolderModal] = useState<ArchiveCardItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const fetchArchiveItems = async () => {
     try {
@@ -152,6 +166,56 @@ export default function ArchivePage() {
       setIsUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    try {
+      setIsUploading(true);
+      setUploadError(null);
+      setUploadSuccess(null);
+
+      const firstFile = fileList[0];
+      const relPath = (firstFile as any).webkitRelativePath || firstFile.name;
+      const folderName = relPath.includes('/') ? relPath.split('/')[0] : 'Folder Arsip Baru';
+
+      const formData = new FormData();
+      formData.append('folderName', folderName);
+      formData.append(
+        'category',
+        activeTab === 'projects' ? 'Projects' : activeTab === 'completed' ? 'Completed' : 'Writing'
+      );
+
+      for (let i = 0; i < fileList.length; i++) {
+        formData.append('files', fileList[i]);
+      }
+
+      const res = await fetch('/api/archive/upload-folder', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Gagal mengunggah folder.');
+      }
+
+      setUploadSuccess(`Folder "${folderName}" (${fileList.length} berkas) berhasil diunggah ke arsip!`);
+      setTimeout(() => setUploadSuccess(null), 4000);
+
+      await fetchArchiveItems();
+    } catch (err: any) {
+      console.error('Error uploading folder to archive:', err);
+      setUploadError(err.message || 'Gagal mengunggah folder.');
+      setTimeout(() => setUploadError(null), 5000);
+    } finally {
+      setIsUploading(false);
+      if (folderInputRef.current) {
+        folderInputRef.current.value = '';
       }
     }
   };
@@ -381,13 +445,22 @@ export default function ArchivePage() {
               )}
             </div>
 
-            {/* Hidden Native File Input for Instant OS File Picker */}
+            {/* Hidden Native File Input for Single/Multi File Selection */}
             <input
               ref={fileInputRef}
               type="file"
               className="hidden"
               onChange={handleFileUpload}
               accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.webp,.zip,.rar"
+            />
+
+            {/* Hidden Native Folder Input for Complete Directory Selection */}
+            <input
+              ref={folderInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFolderUpload}
+              {...({ webkitdirectory: '', directory: '', multiple: true } as any)}
             />
 
             <div className="relative flex items-center">
@@ -410,29 +483,39 @@ export default function ArchivePage() {
               <button
                 onClick={() => setShowAddMenu(!showAddMenu)}
                 className="bg-[#1E2B22] hover:bg-[#2C3F32] text-white border-l border-white/20 px-2 py-2 rounded-r-full text-xs transition-all cursor-pointer"
-                title="Pilihan lainnya"
+                title="Pilihan upload lainnya (Folder / Berkas)"
               >
                 <ChevronDown className="w-3.5 h-3.5 opacity-80" />
               </button>
 
               {showAddMenu && (
-                <div className="absolute right-0 top-full mt-1.5 w-48 bg-white border border-[#E2DBD0] rounded-2xl shadow-lg py-1.5 z-30 text-xs">
+                <div className="absolute right-0 top-full mt-1.5 w-52 bg-white border border-[#E2DBD0] rounded-2xl shadow-lg py-1.5 z-30 text-xs">
                   <button
                     onClick={() => {
                       setShowAddMenu(false);
                       fileInputRef.current?.click();
                     }}
-                    className="w-full text-left px-3.5 py-2 hover:bg-[#F2EFE9] text-[#1E2B22] font-medium flex items-center gap-2"
+                    className="w-full text-left px-3.5 py-2 hover:bg-[#F2EFE9] text-[#1E2B22] font-medium flex items-center gap-2 cursor-pointer"
                   >
                     <UploadCloud className="w-4 h-4 text-[#315D47]" />
                     <span>Unggah Berkas (File)</span>
                   </button>
                   <button
-                    onClick={handleAddNewFolder}
-                    className="w-full text-left px-3.5 py-2 hover:bg-[#F2EFE9] text-[#1E2B22] flex items-center gap-2"
+                    onClick={() => {
+                      setShowAddMenu(false);
+                      folderInputRef.current?.click();
+                    }}
+                    className="w-full text-left px-3.5 py-2 hover:bg-[#F2EFE9] text-[#1E2B22] font-medium flex items-center gap-2 cursor-pointer"
                   >
-                    <Folder className="w-4 h-4 text-[#8DAA96]" />
-                    <span>Buat Folder Arsip</span>
+                    <Folder className="w-4 h-4 text-[#E2B158]" />
+                    <span>Unggah Folder Lengkap</span>
+                  </button>
+                  <button
+                    onClick={handleAddNewFolder}
+                    className="w-full text-left px-3.5 py-2 hover:bg-[#F2EFE9] text-[#1E2B22] flex items-center gap-2 cursor-pointer border-t border-[#ECE7DF]/60 mt-1"
+                  >
+                    <FolderOpen className="w-4 h-4 text-[#8DAA96]" />
+                    <span>Buat Folder Arsip Baru</span>
                   </button>
                 </div>
               )}
@@ -465,148 +548,287 @@ export default function ArchivePage() {
               Belum ada berkas diarsipkan
             </h3>
             <p className="text-xs text-[#7A827B] mt-1 max-w-sm">
-              Dokumen atau proyek yang telah selesai dapat disimpan di sini agar ruang kerja utamamu tetap rapi dan teratur.
+              Dokumen, berkas tugas, atau satu folder riset penuh dapat disimpan di sini agar ruang kerja utamamu tetap rapi.
             </p>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              className="mt-4 px-4 py-2 rounded-full bg-[#1E2B22] text-white text-xs font-medium hover:bg-[#2C3F32] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-            >
-              {isUploading ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Plus className="w-3.5 h-3.5" />
-              )}
-              <span>{isUploading ? 'Mengunggah...' : '+ Unggah Berkas Baru'}</span>
-            </button>
+            <div className="flex items-center gap-3 mt-4">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="px-4 py-2 rounded-full bg-[#1E2B22] text-white text-xs font-medium hover:bg-[#2C3F32] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                {isUploading ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5" />
+                )}
+                <span>+ Unggah Berkas</span>
+              </button>
+              <button
+                onClick={() => folderInputRef.current?.click()}
+                disabled={isUploading}
+                className="px-4 py-2 rounded-full bg-white text-[#1E2B22] border border-[#DCD5CA] text-xs font-medium hover:bg-[#F4F1EA] transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                <Folder className="w-3.5 h-3.5 text-[#E2B158]" />
+                <span>+ Unggah Folder</span>
+              </button>
+            </div>
           </div>
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white rounded-2xl p-4 border border-[#ECE7DF] shadow-[0_2px_6px_rgba(0,0,0,0.02)] hover:border-[#8DAA96] hover:shadow-md transition-all relative flex flex-col justify-between h-[126px] group"
-              >
-                <div className="flex items-start justify-between gap-2.5">
-                  <div
-                    onClick={() =>
-                      item.attachmentId && handleDownloadItem(item.attachmentId, item.title)
-                    }
-                    className={`flex items-start gap-3 flex-1 min-w-0 ${
-                      item.attachmentId ? 'cursor-pointer' : ''
-                    }`}
-                    title={item.attachmentId ? 'Klik untuk mengunduh / membuka' : undefined}
-                  >
-                    <FileThumbnail type={item.fileType} />
-                    <div className="min-w-0 flex-1 pt-0.5">
-                      <h3 className="font-semibold text-[13px] text-[#1E2B22] leading-snug line-clamp-2 hover:text-[#315D47] transition-colors">
-                        {item.title}
-                      </h3>
+            {items.map((item) => {
+              const isFolder = item.fileType === 'FOLDER';
+
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-2xl p-4 border border-[#ECE7DF] shadow-[0_2px_6px_rgba(0,0,0,0.02)] hover:border-[#8DAA96] hover:shadow-md transition-all relative flex flex-col justify-between h-[126px] group"
+                >
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div
+                      onClick={() => {
+                        if (isFolder) {
+                          setSelectedFolderModal(item);
+                        } else if (item.attachmentId) {
+                          handleDownloadItem(item.attachmentId, item.title);
+                        }
+                      }}
+                      className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer"
+                      title={
+                        isFolder
+                          ? 'Klik untuk melihat isi folder'
+                          : item.attachmentId
+                          ? 'Klik untuk mengunduh / membuka'
+                          : undefined
+                      }
+                    >
+                      <FileThumbnail type={item.fileType} />
+                      <div className="min-w-0 flex-1 pt-0.5">
+                        <h3 className="font-semibold text-[13px] text-[#1E2B22] leading-snug line-clamp-2 group-hover:text-[#315D47] transition-colors">
+                          {item.title}
+                        </h3>
+                      </div>
+                    </div>
+
+                    <div className="relative shrink-0">
+                      <button
+                        onClick={() =>
+                          setMenuOpenId(menuOpenId === item.id ? null : item.id)
+                        }
+                        className="p-1 rounded-lg text-[#8A928B] hover:text-[#1E2B22] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
+                      >
+                        <MoreHorizontal className="w-4 h-4" />
+                      </button>
+
+                      {menuOpenId === item.id && (
+                        <div className="absolute right-0 mt-1 w-40 bg-white border border-[#E2DBD0] rounded-xl shadow-lg py-1 z-30 text-xs">
+                          {isFolder ? (
+                            <button
+                              onClick={() => {
+                                setSelectedFolderModal(item);
+                                setMenuOpenId(null);
+                              }}
+                              className="w-full text-left px-3 py-1.5 hover:bg-[#F2EFE9] flex items-center gap-2 text-[#1E2B22] cursor-pointer"
+                            >
+                              <FolderOpen className="w-3.5 h-3.5 text-[#E2B158]" />
+                              <span>Buka Folder</span>
+                            </button>
+                          ) : item.attachmentId ? (
+                            <button
+                              onClick={() => handleDownloadItem(item.attachmentId!, item.title)}
+                              className="w-full text-left px-3 py-1.5 hover:bg-[#F2EFE9] flex items-center gap-2 text-[#1E2B22] cursor-pointer"
+                            >
+                              <Download className="w-3.5 h-3.5 text-[#315D47]" />
+                              <span>Unduh Berkas</span>
+                            </button>
+                          ) : null}
+
+                          <button
+                            onClick={() => handleRestoreItem(item.id)}
+                            className="w-full text-left px-3 py-1.5 hover:bg-[#F2EFE9] flex items-center gap-2 text-[#1E2B22] cursor-pointer"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-[#315D47]" />
+                            <span>Pulihkan</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="w-full text-left px-3 py-1.5 hover:bg-red-50 flex items-center gap-2 text-red-600 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Hapus</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="relative shrink-0">
-                    <button
-                      onClick={() =>
-                        setMenuOpenId(menuOpenId === item.id ? null : item.id)
-                      }
-                      className="p-1 rounded-lg text-[#8A928B] hover:text-[#1E2B22] hover:bg-[#F4F1EA] transition-colors cursor-pointer"
-                    >
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-
-                    {menuOpenId === item.id && (
-                      <div className="absolute right-0 mt-1 w-38 bg-white border border-[#E2DBD0] rounded-xl shadow-lg py-1 z-30 text-xs">
-                        {item.attachmentId && (
-                          <button
-                            onClick={() => handleDownloadItem(item.attachmentId!, item.title)}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[#F2EFE9] flex items-center gap-2 text-[#1E2B22] cursor-pointer"
-                          >
-                            <Download className="w-3.5 h-3.5 text-[#315D47]" />
-                            <span>Unduh Berkas</span>
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleRestoreItem(item.id)}
-                          className="w-full text-left px-3 py-1.5 hover:bg-[#F2EFE9] flex items-center gap-2 text-[#1E2B22] cursor-pointer"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5 text-[#315D47]" />
-                          <span>Pulihkan</span>
-                        </button>
-                        <button
-                          onClick={() => handleDeleteItem(item.id)}
-                          className="w-full text-left px-3 py-1.5 hover:bg-red-50 flex items-center gap-2 text-red-600 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Hapus</span>
-                        </button>
-                      </div>
+                  <div className="flex items-center gap-1.5 text-[11px] text-[#7A827B] pl-0.5">
+                    {isFolder ? (
+                      <Folder className="w-3.5 h-3.5 text-[#E2B158] shrink-0" />
+                    ) : (
+                      <Calendar className="w-3.5 h-3.5 text-[#8A928B] shrink-0" />
                     )}
+                    <span className="truncate">{item.dateLabel}</span>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-1.5 text-[11px] text-[#7A827B] pl-0.5">
-                  <Calendar className="w-3.5 h-3.5 text-[#8A928B] shrink-0" />
-                  <span className="truncate">{item.dateLabel}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-[#ECE7DF] shadow-[0_2px_6px_rgba(0,0,0,0.02)] divide-y divide-[#ECE7DF]">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="p-3.5 flex items-center justify-between hover:bg-[#FAF8F5] transition-colors"
-              >
+            {items.map((item) => {
+              const isFolder = item.fileType === 'FOLDER';
+
+              return (
                 <div
-                  onClick={() =>
-                    item.attachmentId && handleDownloadItem(item.attachmentId, item.title)
-                  }
-                  className={`flex items-center gap-3 min-w-0 ${
-                    item.attachmentId ? 'cursor-pointer group' : ''
-                  }`}
-                  title={item.attachmentId ? 'Klik untuk mengunduh / membuka' : undefined}
+                  key={item.id}
+                  className="p-3.5 flex items-center justify-between hover:bg-[#FAF8F5] transition-colors"
                 >
-                  <FileThumbnail type={item.fileType} />
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-sm text-[#1E2B22] truncate group-hover:text-[#315D47] transition-colors">
-                      {item.title}
-                    </h3>
-                    <div className="flex items-center gap-1.5 text-xs text-[#7A827B] mt-0.5">
-                      <Calendar className="w-3 h-3 text-[#8A928B]" />
-                      <span>{item.dateLabel}</span>
+                  <div
+                    onClick={() => {
+                      if (isFolder) {
+                        setSelectedFolderModal(item);
+                      } else if (item.attachmentId) {
+                        handleDownloadItem(item.attachmentId, item.title);
+                      }
+                    }}
+                    className="flex items-center gap-3 min-w-0 cursor-pointer group"
+                    title={
+                      isFolder
+                        ? 'Klik untuk melihat isi folder'
+                        : item.attachmentId
+                        ? 'Klik untuk mengunduh / membuka'
+                        : undefined
+                    }
+                  >
+                    <FileThumbnail type={item.fileType} />
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-sm text-[#1E2B22] truncate group-hover:text-[#315D47] transition-colors">
+                        {item.title}
+                      </h3>
+                      <div className="flex items-center gap-1.5 text-xs text-[#7A827B] mt-0.5">
+                        {isFolder ? (
+                          <Folder className="w-3 h-3 text-[#E2B158]" />
+                        ) : (
+                          <Calendar className="w-3 h-3 text-[#8A928B]" />
+                        )}
+                        <span>{item.dateLabel}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {item.attachmentId && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isFolder ? (
+                      <button
+                        onClick={() => setSelectedFolderModal(item)}
+                        className="p-1.5 text-[#E2B158] hover:bg-[#FAF3E8] rounded-lg transition-colors cursor-pointer"
+                        title="Buka Folder"
+                      >
+                        <FolderOpen className="w-4 h-4" />
+                      </button>
+                    ) : item.attachmentId ? (
+                      <button
+                        onClick={() => handleDownloadItem(item.attachmentId!, item.title)}
+                        className="p-1.5 text-[#315D47] hover:bg-[#E8EFE9] rounded-lg transition-colors cursor-pointer"
+                        title="Unduh Berkas"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    ) : null}
+
                     <button
-                      onClick={() => handleDownloadItem(item.attachmentId!, item.title)}
+                      onClick={() => handleRestoreItem(item.id)}
                       className="p-1.5 text-[#315D47] hover:bg-[#E8EFE9] rounded-lg transition-colors cursor-pointer"
-                      title="Unduh Berkas"
+                      title="Pulihkan"
                     >
-                      <Download className="w-4 h-4" />
+                      <RotateCcw className="w-4 h-4" />
                     </button>
-                  )}
-                  <button
-                    onClick={() => handleRestoreItem(item.id)}
-                    className="p-1.5 text-[#315D47] hover:bg-[#E8EFE9] rounded-lg transition-colors cursor-pointer"
-                    title="Pulihkan"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteItem(item.id)}
-                    className="p-1.5 text-[#8A928B] hover:text-red-600 transition-colors cursor-pointer"
-                    title="Hapus"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    <button
+                      onClick={() => handleDeleteItem(item.id)}
+                      className="p-1.5 text-[#8A928B] hover:text-red-600 transition-colors cursor-pointer"
+                      title="Hapus"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* FOLDER CONTENT MODAL */}
+        {selectedFolderModal && (
+          <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-2xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-[#E2DBD0] space-y-5 animate-in fade-in zoom-in-95 duration-150">
+              {/* Modal Header */}
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-[#FAF3E8] border border-[#F0E4D2] flex items-center justify-center">
+                    <Folder className="w-6 h-6 text-[#E2B158]" />
+                  </div>
+                  <div>
+                    <h2 className="font-serif text-xl font-bold text-[#1E2B22]">
+                      {selectedFolderModal.title}
+                    </h2>
+                    <p className="text-xs text-[#7A827B]">
+                      {selectedFolderModal.files?.length || selectedFolderModal.fileCount || 0} berkas dalam folder ini
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedFolderModal(null)}
+                  className="p-1.5 rounded-full text-[#8A928B] hover:bg-[#F2EFE9] hover:text-[#1E2B22] transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
-            ))}
+
+              {/* Files List Inside Folder */}
+              <div className="max-h-72 overflow-y-auto space-y-2 pr-1 divide-y divide-[#ECE7DF]/70">
+                {selectedFolderModal.files && selectedFolderModal.files.length > 0 ? (
+                  selectedFolderModal.files.map((file) => (
+                    <div
+                      key={file.id}
+                      className="pt-2 pb-1 flex items-center justify-between gap-3 text-xs hover:bg-[#FAF8F5] p-2 rounded-xl transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <FileText className="w-4 h-4 text-[#315D47] shrink-0" />
+                        <span className="font-medium text-[#1E2B22] truncate">
+                          {file.originalName}
+                        </span>
+                        <span className="text-[10px] text-[#8A928B] shrink-0">
+                          ({Math.round(file.fileSize / 1024)} KB)
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleDownloadItem(file.id, file.originalName)}
+                        className="px-2.5 py-1 rounded-lg bg-[#E8EFE9] hover:bg-[#DCE7DC] text-[#315D47] font-semibold text-[11px] flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>Unduh</span>
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-xs text-[#7A827B]">
+                    Folder ini belum memiliki daftar berkas rincian.
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-2 border-t border-[#ECE7DF] flex items-center justify-between">
+                <span className="text-xs text-[#7A827B]">
+                  {selectedFolderModal.dateLabel}
+                </span>
+                <button
+                  onClick={() => setSelectedFolderModal(null)}
+                  className="px-4 py-2 rounded-full bg-[#1E2B22] text-white text-xs font-medium hover:bg-[#2C3F32] transition-colors cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

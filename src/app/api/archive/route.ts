@@ -31,6 +31,8 @@ export async function GET(req: NextRequest) {
         originalId: it.originalId,
         attachmentId: meta.attachmentId || (it.itemType === 'FILE' || it.itemType === 'PDF' || it.itemType === 'DOCX' ? it.originalId : null),
         fileSize: meta.fileSize,
+        fileCount: meta.fileCount || (meta.files ? meta.files.length : 0),
+        files: meta.files || [],
       };
     });
 
