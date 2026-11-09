@@ -26,9 +26,13 @@ export async function POST(req: NextRequest) {
     await mkdir(uploadDir, { recursive: true });
 
     const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    let itemType: 'PDF' | 'DOCX' | 'FOLDER' = 'DOCX';
+    let itemType: 'PDF' | 'DOCX' | 'FOLDER' | 'XLSX' | 'PPTX' = 'DOCX';
     if (ext === 'pdf') {
       itemType = 'PDF';
+    } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+      itemType = 'XLSX';
+    } else if (ext === 'pptx' || ext === 'ppt') {
+      itemType = 'PPTX';
     } else if (ext === 'zip' || ext === 'rar' || ext === 'tar') {
       itemType = 'FOLDER';
     } else {

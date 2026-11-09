@@ -18,14 +18,17 @@ export async function PUT(
       return NextResponse.json({ error: 'Event tidak ditemukan' }, { status: 404 });
     }
 
+    const targetStart = body.startAt || body.date;
+    const targetEnd = body.endAt;
+
     const updated = await prisma.calendarEvent.update({
       where: { id },
       data: {
         title: body.title !== undefined ? body.title : undefined,
         description: body.description !== undefined ? body.description : undefined,
-        category: body.category !== undefined ? body.category.toUpperCase() : undefined,
-        startAt: body.startAt ? new Date(body.startAt) : undefined,
-        endAt: body.endAt ? new Date(body.endAt) : undefined,
+        category: body.category !== undefined ? (body.category.toUpperCase() as any) : undefined,
+        startAt: targetStart ? new Date(targetStart) : undefined,
+        endAt: targetEnd ? new Date(targetEnd) : undefined,
         completed: body.completed !== undefined ? body.completed : undefined,
       },
     });

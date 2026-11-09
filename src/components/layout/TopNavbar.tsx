@@ -24,8 +24,28 @@ export default function TopNavbar() {
 
   const [showNotifications, setShowNotifications] = useState(false);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [headerDateText, setHeaderDateText] = useState('Hari ini');
+  const [headerDateInput, setHeaderDateInput] = useState('');
   const notifRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
+  const datePickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const now = new Date();
+    setHeaderDateText(
+      now.toLocaleDateString('id-ID', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      })
+    );
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    setHeaderDateInput(`${yyyy}-${mm}-${dd}`);
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -53,6 +73,9 @@ export default function TopNavbar() {
       }
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
         setShowSearchDropdown(false);
+      }
+      if (datePickerRef.current && !datePickerRef.current.contains(event.target as Node)) {
+        setShowDatePicker(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -186,11 +209,61 @@ export default function TopNavbar() {
 
       {/* Right Controls */}
       <div className="flex items-center gap-3">
-        {/* Date Selector Badge */}
-        <div className="hidden md:flex items-center gap-2 bg-[#FFFFFF] px-3.5 py-1.5 rounded-full border border-[#E9E5DE] text-[13px] text-[#202923] shadow-xs">
-          <Calendar className="w-3.5 h-3.5 text-[#77776F]" />
-          <span className="font-medium">Mon, 10 Nov 2026</span>
-          <span className="text-[10px] text-[#77776F]">▼</span>
+        {/* Date Selector Badge & Popover */}
+        <div ref={datePickerRef} className="relative hidden md:block">
+          <button
+            onClick={() => setShowDatePicker(!showDatePicker)}
+            className="flex items-center gap-2 bg-[#FFFFFF] px-3.5 py-1.5 rounded-full border border-[#E9E5DE] text-[13px] text-[#202923] hover:border-[#8DAA96] transition-colors shadow-xs cursor-pointer"
+          >
+            <Calendar className="w-3.5 h-3.5 text-[#315D47]" />
+            <span className="font-medium">{headerDateText}</span>
+            <span className="text-[10px] text-[#77776F]">▼</span>
+          </button>
+
+          {/* Date Picker Popover */}
+          {showDatePicker && (
+            <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl border border-[#E9E5DE] shadow-xl p-4 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-[#ECE7DF]">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-[#315D47]" />
+                  <span className="text-xs font-bold text-[#1E2B22]">Pilih Tanggal</span>
+                </div>
+                <span className="text-[10px] text-[#77776F] bg-[#FAF8F5] px-2 py-0.5 rounded-full border border-[#ECE7DF]">
+                  Hari Ini
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-[#77776F] mb-1 font-medium">
+                  Cari atau lompat ke tanggal:
+                </label>
+                <input
+                  type="date"
+                  value={headerDateInput}
+                  onChange={(e) => {
+                    setHeaderDateInput(e.target.value);
+                    if (e.target.value) {
+                      setShowDatePicker(false);
+                      router.push('/calendar');
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[#FAF8F5] border border-[#E9E5DE] font-mono text-[#202923] focus:outline-hidden focus:border-[#315D47]"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-[#ECE7DF] flex items-center justify-between">
+                <button
+                  onClick={() => {
+                    setShowDatePicker(false);
+                    router.push('/calendar');
+                  }}
+                  className="w-full py-1.5 px-3 rounded-xl bg-[#1E2B22] hover:bg-[#315D47] text-white text-xs font-medium text-center transition-colors"
+                >
+                  Buka Kalender Akademik →
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Notifications Button */}
@@ -224,29 +297,37 @@ export default function TopNavbar() {
               </div>
 
               <div className="mt-3 space-y-2.5 max-h-[280px] overflow-y-auto">
-                {notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    onClick={() => markNotificationRead(n.id)}
-                    className={`p-2.5 rounded-xl transition-colors cursor-pointer text-left ${
-                      n.read
-                        ? 'bg-[#F7F6F2]/50 hover:bg-[#F7F6F2]'
-                        : 'bg-[#DCE7DC]/40 hover:bg-[#DCE7DC]/70'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="text-[12.5px] font-semibold text-[#202923]">
-                        {n.title}
-                      </span>
-                      <span className="text-[10px] text-[#77776F] whitespace-nowrap">
-                        {n.time}
-                      </span>
-                    </div>
-                    <p className="text-[11.5px] text-[#55554E] mt-0.5 line-clamp-2">
-                      {n.message}
-                    </p>
+                {notifications.length === 0 ? (
+                  <div className="py-6 text-center text-[#77776F]">
+                    <Bell className="w-6 h-6 mx-auto mb-1.5 opacity-30 text-[#202923]" />
+                    <p className="text-xs font-medium">Belum ada notifikasi baru.</p>
+                    <p className="text-[11px] opacity-75 mt-0.5">Semua agenda & tugas Anda sudah tercatat.</p>
                   </div>
-                ))}
+                ) : (
+                  notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => markNotificationRead(n.id)}
+                      className={`p-2.5 rounded-xl transition-colors cursor-pointer text-left ${
+                        n.read
+                          ? 'bg-[#F7F6F2]/50 hover:bg-[#F7F6F2]'
+                          : 'bg-[#DCE7DC]/40 hover:bg-[#DCE7DC]/70'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="text-[12.5px] font-semibold text-[#202923]">
+                          {n.title}
+                        </span>
+                        <span className="text-[10px] text-[#77776F] whitespace-nowrap">
+                          {n.time}
+                        </span>
+                      </div>
+                      <p className="text-[11.5px] text-[#55554E] mt-0.5 line-clamp-2">
+                        {n.message}
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

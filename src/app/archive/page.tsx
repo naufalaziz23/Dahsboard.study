@@ -37,7 +37,7 @@ interface FolderFileInfo {
 interface ArchiveCardItem {
   id: string;
   title: string;
-  fileType: 'PDF' | 'DOCX' | 'FOLDER';
+  fileType: 'PDF' | 'DOCX' | 'FOLDER' | 'XLSX' | 'PPTX' | string;
   category: 'Writing' | 'Projects' | 'Completed';
   dateLabel: string;
   originalId?: string;
@@ -47,7 +47,7 @@ interface ArchiveCardItem {
   files?: FolderFileInfo[];
 }
 
-function FileThumbnail({ type }: { type: 'PDF' | 'DOCX' | 'FOLDER' }) {
+function FileThumbnail({ type }: { type: string }) {
   if (type === 'FOLDER') {
     return (
       <div className="relative w-11 h-11 shrink-0 flex items-center justify-center">
@@ -71,21 +71,43 @@ function FileThumbnail({ type }: { type: 'PDF' | 'DOCX' | 'FOLDER' }) {
   }
 
   const isPDF = type === 'PDF';
+  const isXLSX = type === 'XLSX';
+  const isPPTX = type === 'PPTX';
+
+  const badgeColor = isPDF
+    ? 'bg-[#DC3545]'
+    : isXLSX
+    ? 'bg-[#107C41]'
+    : isPPTX
+    ? 'bg-[#D24726]'
+    : 'bg-[#2563EB]';
 
   return (
     <div className="relative w-10 h-12 shrink-0">
       <div className="w-9 h-11.5 bg-white rounded-md border border-[#DCD5CA] shadow-2xs relative overflow-hidden flex flex-col pt-1.5 px-1.5">
-        <div className="w-full h-0.5 bg-[#D9D3C7] rounded-full mb-1" />
-        <div className="w-4/5 h-0.5 bg-[#E8E2D7] rounded-full mb-1" />
-        <div className="w-full h-0.5 bg-[#E8E2D7] rounded-full mb-1" />
-        <div className="w-3/5 h-0.5 bg-[#E8E2D7] rounded-full mb-1" />
+        {isXLSX ? (
+          // Spreadsheet grid illustration
+          <div className="grid grid-cols-2 gap-0.5 w-full pt-0.5">
+            <div className="h-1.5 bg-[#E8EFE9] rounded-2xs" />
+            <div className="h-1.5 bg-[#D5E4D8] rounded-2xs" />
+            <div className="h-1.5 bg-[#E8EFE9] rounded-2xs" />
+            <div className="h-1.5 bg-[#E8EFE9] rounded-2xs" />
+            <div className="h-1.5 bg-[#D5E4D8] rounded-2xs" />
+            <div className="h-1.5 bg-[#E8EFE9] rounded-2xs" />
+          </div>
+        ) : (
+          <>
+            <div className="w-full h-0.5 bg-[#D9D3C7] rounded-full mb-1" />
+            <div className="w-4/5 h-0.5 bg-[#E8E2D7] rounded-full mb-1" />
+            <div className="w-full h-0.5 bg-[#E8E2D7] rounded-full mb-1" />
+            <div className="w-3/5 h-0.5 bg-[#E8E2D7] rounded-full mb-1" />
+          </>
+        )}
         <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-[#EFECE6] border-b border-l border-[#DCD5CA] rounded-bl-xs" />
       </div>
 
       <div
-        className={`absolute -bottom-1 -left-1 px-1 py-0.5 rounded-[3px] text-[8.5px] font-bold tracking-tight text-white shadow-2xs ${
-          isPDF ? 'bg-[#DC3545]' : 'bg-[#2563EB]'
-        }`}
+        className={`absolute -bottom-1 -left-1 px-1 py-0.5 rounded-[3px] text-[8px] font-bold tracking-tight text-white shadow-2xs uppercase ${badgeColor}`}
       >
         {type}
       </div>
@@ -498,7 +520,7 @@ export default function ArchivePage() {
                     className="w-full text-left px-3.5 py-2 hover:bg-[#F2EFE9] text-[#1E2B22] font-medium flex items-center gap-2 cursor-pointer"
                   >
                     <UploadCloud className="w-4 h-4 text-[#315D47]" />
-                    <span>Unggah Berkas (File)</span>
+                    <span>Unggah Berkas (PDF, DOCX, Excel)</span>
                   </button>
                   <button
                     onClick={() => {

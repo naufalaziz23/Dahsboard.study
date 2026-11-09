@@ -14,11 +14,11 @@ export default function MyWritingPage() {
 
   const handleNewDocument = () => {
     const title = window.prompt('Judul Dokumen Baru:', 'Dokumen Baru');
-    if (title) {
+    if (title && title.trim()) {
       addDocument({
-        folderId: 'f_skripsi',
-        title,
-        content: `<h2>${title}</h2><p>Mulai menulis draf Anda di sini...</p>`,
+        folderId: '',
+        title: title.trim(),
+        content: `<h2>${title.trim()}</h2><p>Mulai menulis draf Anda di sini...</p>`,
         progress: 0,
       });
     }

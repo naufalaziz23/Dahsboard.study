@@ -7,6 +7,7 @@ import {
   ChevronRight,
   FileText,
   Plus,
+  FolderPlus,
   Search,
   MoreVertical,
   Target,
@@ -23,11 +24,13 @@ export default function WritingSidebar() {
     addFolder,
   } = useStore();
 
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    f_skripsi: true,
-  });
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [filterQuery, setFilterQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+
+  const rawTotalWords = documents.reduce((sum, d) => sum + (d.wordCount || 0), 0);
+  const targetWords = 5000;
+  const progressPercent = Math.min(100, Math.round((rawTotalWords / targetWords) * 100));
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders((prev) => ({
@@ -50,8 +53,8 @@ export default function WritingSidebar() {
 
   const handleCreateFolder = () => {
     const name = window.prompt('Nama Folder Baru:');
-    if (name) {
-      addFolder(name);
+    if (name && name.trim()) {
+      addFolder(name.trim());
     }
   };
 
@@ -66,16 +69,23 @@ export default function WritingSidebar() {
           </h3>
           <div className="flex items-center gap-1 text-[#77776F]">
             <button
-              onClick={() => handleCreateDocument('f_skripsi')}
-              className="p-1 rounded-md hover:bg-[#F0EEE8] hover:text-[#202923] transition-colors"
-              title="Add Document"
+              onClick={handleCreateFolder}
+              className="p-1 rounded-md hover:bg-[#F0EEE8] hover:text-[#202923] transition-colors cursor-pointer"
+              title="Buat Folder Baru"
+            >
+              <FolderPlus className="w-4 h-4 text-[#315D47]" />
+            </button>
+            <button
+              onClick={() => handleCreateDocument()}
+              className="p-1 rounded-md hover:bg-[#F0EEE8] hover:text-[#202923] transition-colors cursor-pointer"
+              title="Buat Dokumen Baru"
             >
               <Plus className="w-4 h-4" />
             </button>
             <button
               onClick={() => setShowSearch(!showSearch)}
-              className="p-1 rounded-md hover:bg-[#F0EEE8] hover:text-[#202923] transition-colors"
-              title="Search"
+              className="p-1 rounded-md hover:bg-[#F0EEE8] hover:text-[#202923] transition-colors cursor-pointer"
+              title="Cari file"
             >
               <Search className="w-4 h-4" />
             </button>
@@ -98,14 +108,23 @@ export default function WritingSidebar() {
         {/* Folders List & Unfiled Documents */}
         <div className="mt-3 space-y-1 overflow-y-auto max-h-[380px]">
           {folders.length === 0 && documents.length === 0 ? (
-            <div className="py-6 text-center">
-              <p className="text-xs text-[#77776F]">Belum ada dokumen.</p>
-              <button
-                onClick={() => handleCreateDocument()}
-                className="mt-2 text-xs text-[#315D47] font-semibold hover:underline"
-              >
-                + Buat Dokumen Pertama
-              </button>
+            <div className="py-6 text-center space-y-2">
+              <p className="text-xs text-[#77776F]">Belum ada dokumen atau folder.</p>
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <button
+                  onClick={handleCreateFolder}
+                  className="text-xs text-[#315D47] font-semibold hover:underline cursor-pointer"
+                >
+                  + Buat Folder
+                </button>
+                <span className="text-[#A0988E]">•</span>
+                <button
+                  onClick={() => handleCreateDocument()}
+                  className="text-xs text-[#315D47] font-semibold hover:underline cursor-pointer"
+                >
+                  + Buat Dokumen
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -216,14 +235,17 @@ export default function WritingSidebar() {
 
           <div>
             <div className="flex justify-between items-center text-[12px] mb-1">
-              <span className="text-[#77776F]">Target <strong className="text-[#202923]">10.000 kata</strong></span>
-              <span className="font-mono font-bold text-[#315D47]">62%</span>
+              <span className="text-[#77776F]">Target <strong className="text-[#202923]">5.000 kata</strong></span>
+              <span className="font-mono font-bold text-[#315D47]">{progressPercent}%</span>
             </div>
             <div className="w-full h-2 rounded-full bg-[#E8EFE9] overflow-hidden">
-              <div className="w-[62%] h-full bg-[#315D47] rounded-full" />
+              <div
+                className="h-full bg-[#315D47] rounded-full transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
             </div>
             <p className="text-[10.5px] font-mono text-[#77776F] mt-1.5">
-              6.200 / 10.000 kata
+              {rawTotalWords} / 5.000 kata
             </p>
           </div>
         </div>

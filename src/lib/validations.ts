@@ -7,13 +7,28 @@ export const LoginSchema = z.object({
 
 export const ProjectSchema = z.object({
   title: z.string().min(1, 'Judul proyek wajib diisi').max(255),
-  subtitle: z.string().max(255).optional(),
-  description: z.string().optional(),
-  status: z.enum(['PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED']).default('IN_PROGRESS'),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
+  subtitle: z.string().max(255).optional().nullable(),
+  description: z.string().optional().nullable(),
+  status: z.preprocess(
+    (val) => {
+      if (typeof val === 'string') {
+        const clean = val.toUpperCase().replace(/\s+/g, '_');
+        if (clean === 'IN_PROGRESS' || clean === 'ON_GOING') return 'IN_PROGRESS';
+        if (clean === 'PLANNING') return 'PLANNING';
+        if (clean === 'COMPLETED') return 'COMPLETED';
+        if (clean === 'ON_HOLD') return 'ON_HOLD';
+      }
+      return val;
+    },
+    z.enum(['PLANNING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED'])
+  ).default('IN_PROGRESS'),
+  priority: z.preprocess(
+    (val) => (typeof val === 'string' ? val.toUpperCase() : val),
+    z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT'])
+  ).default('MEDIUM'),
   category: z.string().default('Skripsi'),
-  startDate: z.string().datetime().optional().nullable(),
-  deadline: z.string().datetime().optional().nullable(),
+  startDate: z.string().optional().nullable(),
+  deadline: z.string().optional().nullable(),
 });
 
 export const TaskSchema = z.object({

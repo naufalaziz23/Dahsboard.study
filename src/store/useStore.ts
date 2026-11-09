@@ -54,6 +54,7 @@ interface StoreState {
   addCalendarEvent: (event: Omit<CalendarEvent, 'id'>) => Promise<void>;
   toggleCalendarEvent: (id: string) => Promise<void>;
   deleteCalendarEvent: (id: string) => Promise<void>;
+  updateCalendarEvent: (id: string, updates: Partial<CalendarEvent>) => Promise<void>;
   selectedCalendarDate: string;
   setSelectedCalendarDate: (date: string) => void;
 
@@ -126,16 +127,8 @@ export const useStore = create<StoreState>((set, get) => ({
       if (projectsRes?.projects) {
         stateUpdates.projects = projectsRes.projects.map((p: any) => ({
           ...p,
-          milestones: [
-            { id: 'm1', title: 'Bab I-III (Revisi)', status: 'Selesai' },
-            { id: 'm2', title: 'Pengambilan Data', status: 'Selesai' },
-            { id: 'm3', title: 'Bab IV - Hasil & Pembahasan', status: p.progress > 70 ? 'Dalam proses' : 'Belum dimulai' },
-            { id: 'm4', title: 'Bab V - Kesimpulan & Saran', status: 'Belum dimulai' },
-          ],
-          upcomingMilestones: [
-            { title: 'Bab IV', date: '25 Nov' },
-            { title: 'Bab V', date: '10 Des' },
-          ],
+          milestones: [],
+          upcomingMilestones: [],
           references: [],
           notes: [],
         }));
@@ -175,6 +168,43 @@ export const useStore = create<StoreState>((set, get) => ({
         stateUpdates.archiveItems = archiveRes.items;
       }
 
+      // Generate REAL notifications from database events and tasks (no dummy data)
+      const realNotifications: NotificationItem[] = [];
+      if (eventsRes?.events) {
+        eventsRes.events
+          .filter((ev: any) => !ev.completed)
+          .slice(0, 3)
+          .forEach((ev: any) => {
+            realNotifications.push({
+              id: `notif_ev_${ev.id}`,
+              title: `Agenda: ${ev.title}`,
+              message: `Jadwal agenda pada ${ev.date}${ev.time ? ' pukul ' + ev.time : ''}.`,
+              time: 'Mendatang',
+              read: false,
+              type: 'reminder',
+            });
+          });
+      }
+      if (tasksRes?.tasks) {
+        tasksRes.tasks
+          .filter((t: any) => t.status !== 'COMPLETED' && t.deadline)
+          .slice(0, 3)
+          .forEach((t: any) => {
+            realNotifications.push({
+              id: `notif_task_${t.id}`,
+              title: `Tenggat Waktu: ${t.title}`,
+              message: `Batas pengumpulan: ${new Date(t.deadline).toLocaleDateString('id-ID', {
+                day: 'numeric',
+                month: 'short',
+              })}.`,
+              time: 'Tenggat',
+              read: false,
+              type: 'deadline',
+            });
+          });
+      }
+      stateUpdates.notifications = realNotifications;
+
       set({ ...stateUpdates, isLoading: false });
     } catch (err) {
       console.error('Error syncing store with MySQL:', err);
@@ -188,13 +218,42 @@ export const useStore = create<StoreState>((set, get) => ({
 
   addProject: async (newProject) => {
     try {
+      const statusMap: Record<string, string> = {
+        'in progress': 'IN_PROGRESS',
+        'on going': 'IN_PROGRESS',
+        'planning': 'PLANNING',
+        'completed': 'COMPLETED',
+        'on hold': 'ON_HOLD',
+      };
+      const cleanStatus = statusMap[(newProject.status || '').toLowerCase()] || 'IN_PROGRESS';
+      let cleanDeadline = null;
+      if (newProject.deadline) {
+        try {
+          const d = new Date(newProject.deadline);
+          if (!isNaN(d.getTime())) {
+            cleanDeadline = d.toISOString();
+          }
+        } catch {}
+      }
+
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProject),
+        body: JSON.stringify({
+          title: newProject.title,
+          subtitle: newProject.subtitle || null,
+          description: newProject.description || '',
+          status: cleanStatus,
+          priority: 'MEDIUM',
+          category: newProject.category || 'Skripsi',
+          deadline: cleanDeadline,
+        }),
       });
       if (res.ok) {
         await get().fetchFromDatabase();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error('Error adding project:', err);
       }
     } catch (err) {
       console.error('Error adding project:', err);
@@ -381,18 +440,45 @@ export const useStore = create<StoreState>((set, get) => ({
 
   addCalendarEvent: async (event) => {
     try {
+      // Map friendly category names to DB enum values
+      const categoryMap: Record<string, string> = {
+        bimbingan: 'CONSULTATION',
+        consultation: 'CONSULTATION',
+        deadline: 'DEADLINE',
+        penulisan: 'WRITING',
+        writing: 'WRITING',
+        pengolahan: 'DATA_COLLECTION',
+        data_collection: 'DATA_COLLECTION',
+        kegiatan: 'ACADEMIC',
+        academic: 'ACADEMIC',
+        lainnya: 'OTHER',
+        other: 'OTHER',
+      };
+      const rawCat = (event.category || '').toLowerCase();
+      const dbCategory = categoryMap[rawCat] || rawCat.toUpperCase() || 'WRITING';
+
+      // Ensure startAt is noon UTC so timezone shifts never cross a day boundary
+      const startAt = event.date
+        ? new Date(event.date + 'T12:00:00.000Z').toISOString()
+        : new Date().toISOString();
+
       const res = await fetch('/api/calendar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: event.title,
-          startAt: event.date,
-          category: (event.category?.toUpperCase() as any) || 'WRITING',
-          projectId: event.projectId,
+          startAt,
+          category: dbCategory,
+          projectId: event.projectId || null,
+          allDay: true,
+          completed: event.completed ?? false,
         }),
       });
       if (res.ok) {
         await get().fetchFromDatabase();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error('Error adding calendar event:', err);
       }
     } catch (err) {
       console.error('Error adding calendar event:', err);
@@ -425,8 +511,51 @@ export const useStore = create<StoreState>((set, get) => ({
         calendarEvents: s.calendarEvents.filter((e) => e.id !== id),
       }));
       await fetch(`/api/calendar/${id}`, { method: 'DELETE' });
+      await get().fetchFromDatabase();
     } catch (err) {
       console.error('Error deleting calendar event:', err);
+    }
+  },
+
+  updateCalendarEvent: async (id: string, updates: Partial<CalendarEvent>) => {
+    try {
+      set((s) => ({
+        calendarEvents: s.calendarEvents.map((e) => (e.id === id ? { ...e, ...updates } : e)),
+      }));
+
+      const categoryMap: Record<string, string> = {
+        bimbingan: 'CONSULTATION',
+        consultation: 'CONSULTATION',
+        deadline: 'DEADLINE',
+        penulisan: 'WRITING',
+        writing: 'WRITING',
+        pengolahan: 'DATA_COLLECTION',
+        data_collection: 'DATA_COLLECTION',
+        kegiatan: 'ACADEMIC',
+        academic: 'ACADEMIC',
+        lainnya: 'OTHER',
+        other: 'OTHER',
+      };
+
+      const payload: Record<string, any> = {};
+      if (updates.title !== undefined) payload.title = updates.title;
+      if (updates.completed !== undefined) payload.completed = updates.completed;
+      if (updates.date) {
+        payload.startAt = new Date(updates.date + 'T12:00:00.000Z').toISOString();
+      }
+      if (updates.category) {
+        const rawCat = updates.category.toLowerCase();
+        payload.category = categoryMap[rawCat] || rawCat.toUpperCase();
+      }
+
+      await fetch(`/api/calendar/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      await get().fetchFromDatabase();
+    } catch (err) {
+      console.error('Error updating calendar event:', err);
     }
   },
 
@@ -469,32 +598,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  notifications: [
-    {
-      id: 'notif_1',
-      title: 'Tenggat Waktu Besok',
-      message: 'Revisi Bab I & II Skripsi batas akhir besok pukul 23:59.',
-      time: '1 jam yang lalu',
-      read: false,
-      type: 'deadline',
-    },
-    {
-      id: 'notif_2',
-      title: 'Target Menulis Tercapai 🎉',
-      message: 'Hebat! Kamu berhasil menulis 1.250 kata hari ini.',
-      time: '3 jam yang lalu',
-      read: false,
-      type: 'achievement',
-    },
-    {
-      id: 'notif_3',
-      title: 'Pengingat Bimbingan',
-      message: 'Jadwal bimbingan dengan Dr. Slamet Riyadi, M.Pd.',
-      time: 'Kemarin',
-      read: true,
-      type: 'reminder',
-    },
-  ],
+  notifications: [],
 
   markNotificationRead: (id) =>
     set((s) => ({

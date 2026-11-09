@@ -8,6 +8,13 @@ const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/msword',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // XLSX
+  'application/vnd.ms-excel', // XLS
+  'text/csv', // CSV
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // PPTX
+  'application/vnd.ms-powerpoint', // PPT
+  'application/zip',
+  'application/x-zip-compressed',
   'text/plain',
   'image/jpeg',
   'image/png',
